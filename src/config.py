@@ -21,6 +21,7 @@ class AlpacaConfig:
     api_key: str
     secret_key: str
     base_url: str = "https://paper-api.alpaca.markets"
+    data_base_url: str = "https://data.alpaca.markets"
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class LocalPaths:
 
 @dataclass(frozen=True)
 class AppConfig:
-    massive: MassiveConfig
+    massive: Optional[MassiveConfig]
     alpaca: AlpacaConfig
     local: LocalPaths
 
@@ -67,8 +68,6 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     alpaca_key = _get_env("ALPACA_API_KEY") or alpaca_cfg.get("api_key")
     alpaca_secret = _get_env("ALPACA_SECRET_KEY") or alpaca_cfg.get("secret_key")
 
-    if not massive_key:
-        raise ConfigError("Missing MASSIVE_API_KEY (env or config).")
     if not alpaca_key:
         raise ConfigError("Missing ALPACA_API_KEY (env or config).")
     if not alpaca_secret:
@@ -76,10 +75,18 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
 
     massive_base = massive_cfg.get("base_url") or "https://api.polygon.io"
     alpaca_base = alpaca_cfg.get("base_url") or "https://paper-api.alpaca.markets"
+    alpaca_data_base = alpaca_cfg.get("data_base_url") or "https://data.alpaca.markets"
     data_dir = Path(local_cfg.get("data_dir", "data_local"))
 
     return AppConfig(
-        massive=MassiveConfig(api_key=massive_key, base_url=massive_base),
-        alpaca=AlpacaConfig(api_key=alpaca_key, secret_key=alpaca_secret, base_url=alpaca_base),
+        massive=MassiveConfig(api_key=massive_key, base_url=massive_base)
+        if massive_key
+        else None,
+        alpaca=AlpacaConfig(
+            api_key=alpaca_key,
+            secret_key=alpaca_secret,
+            base_url=alpaca_base,
+            data_base_url=alpaca_data_base,
+        ),
         local=LocalPaths(data_dir=data_dir),
     )

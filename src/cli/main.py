@@ -10,8 +10,7 @@ from typing import Iterable
 
 from src.cache.spy_cache import Spy1mCache
 from src.config import ConfigError, load_config
-from src.providers.alpaca import AlpacaBroker
-from src.providers.massive import MassiveMarketDataProvider
+from src.providers.alpaca import AlpacaBroker, AlpacaMarketDataProvider
 
 
 def _parse_date(value: str) -> date:
@@ -32,25 +31,25 @@ def health_check(args: argparse.Namespace) -> int:
         logging.error("Config error: %s", exc)
         return 1
 
-    massive = MassiveMarketDataProvider(config.massive)
-    alpaca = AlpacaBroker(config.alpaca)
+    alpaca_data = AlpacaMarketDataProvider(config.alpaca)
+    alpaca_broker = AlpacaBroker(config.alpaca)
 
     if args.skip_ping:
         logging.info("Config validated. Skipping provider pings.")
         return 0
 
     try:
-        massive.ping()
-        logging.info("Massive ping OK.")
+        alpaca_data.ping()
+        logging.info("Alpaca data ping OK.")
     except Exception as exc:  # noqa: BLE001 - surface provider failures
-        logging.error("Massive ping failed: %s", exc)
+        logging.error("Alpaca data ping failed: %s", exc)
         return 1
 
     try:
-        alpaca.ping()
-        logging.info("Alpaca ping OK.")
+        alpaca_broker.ping()
+        logging.info("Alpaca broker ping OK.")
     except Exception as exc:  # noqa: BLE001 - surface provider failures
-        logging.error("Alpaca ping failed: %s", exc)
+        logging.error("Alpaca broker ping failed: %s", exc)
         return 1
 
     return 0
@@ -69,7 +68,7 @@ def fetch_spy(args: argparse.Namespace) -> int:
         logging.error("End date must be on or after start date.")
         return 1
 
-    provider = MassiveMarketDataProvider(config.massive)
+    provider = AlpacaMarketDataProvider(config.alpaca)
     cache = Spy1mCache(config.local.data_dir)
 
     cached = 0
