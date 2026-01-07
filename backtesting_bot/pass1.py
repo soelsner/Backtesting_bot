@@ -20,7 +20,7 @@ from backtesting_bot.io import load_spy_1m_bars, save_json, save_parquet
 from backtesting_bot.strategies.orb import (
     calculate_orb_range,
     find_orb_entry,
-    resample_to_five_minutes,
+    resample_bars,
 )
 
 
@@ -33,6 +33,11 @@ class Pass1Config:
     spy_1m_path: str = DEFAULT_SPY_1M_PATH
     max_trades_per_day: int = DEFAULT_MAX_TRADES_PER_DAY
     no_entries_after: dt.time | None = None
+    orb_minutes: int = 15
+    candle_interval_minutes: int = 5
+    breakout_basis: str = "close"
+    confirm_full_candle: bool = False
+    output_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -81,13 +86,20 @@ def generate_orb_entries(
         if session_df.empty:
             continue
 
-        five_min_df = resample_to_five_minutes(session_df)
-        orb_range = calculate_orb_range(five_min_df)
+        resampled_df = resample_bars(
+            session_df, interval_minutes=config.candle_interval_minutes
+        )
+        orb_candles = max(1, config.orb_minutes // config.candle_interval_minutes)
+        orb_range = calculate_orb_range(resampled_df, orb_candles=orb_candles)
         if orb_range is None:
             continue
 
         entry = find_orb_entry(
-            five_min_df, orb_range, cutoff_time=config.no_entries_after
+            resampled_df,
+            orb_range,
+            cutoff_time=config.no_entries_after,
+            breakout_basis=config.breakout_basis,
+            confirm_full_candle=config.confirm_full_candle,
         )
         if entry is None:
             continue
@@ -123,7 +135,7 @@ def _build_run_metadata(entries_df: pd.DataFrame, dates: list[dt.date]) -> dict:
 def write_run_outputs(
     entries_df: pd.DataFrame, config: Pass1Config, dates: list[dt.date]
 ) -> Path:
-    run_dir = Path("data_local") / "runs" / config.run_id
+    run_dir = config.output_dir or (Path("data_local") / "runs" / config.run_id)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     save_parquet(entries_df, run_dir / "entries.parquet")
@@ -140,6 +152,10 @@ def write_run_outputs(
             if config.no_entries_after
             else None,
             "max_trades_per_day": config.max_trades_per_day,
+            "orb_minutes": config.orb_minutes,
+            "candle_interval_minutes": config.candle_interval_minutes,
+            "breakout_basis": config.breakout_basis,
+            "confirm_full_candle": config.confirm_full_candle,
         },
         run_dir / "config_snapshot.json",
     )
@@ -178,5 +194,5 @@ def run_pass1_pipeline(config: Pass1Config) -> Path:
             drop=True
         )
 
-    write_run_outputs(entries_df, config, dates)
-    return Path("data_local") / "runs" / config.run_id
+    run_dir = write_run_outputs(entries_df, config, dates)
+    return run_dir
