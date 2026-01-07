@@ -1,0 +1,21 @@
+# Project Decisions (Concise)
+
+- Two-pass backtest architecture
+  - Pass 1 uses SPY only to generate EntrySignals.
+  - Pass 2 selects a specific option contract per EntrySignal and simulates exits using option 1-second aggregates.
+- Data & execution platforms
+  - Massive (formerly Polygon) is the source of truth for historical SPY bars and options 1-second aggregates.
+  - Alpaca is the execution venue for paper/live later; backtests must not depend on Alpaca.
+- Storage
+  - Cache historical data locally as partitioned Parquet under `data_local/`.
+- Option universe selection
+  - At entry time, select 1DTE or 2DTE contracts.
+  - Select $1–$3 OTM relative to SPY spot at entry time.
+  - Calls for bullish signals; puts for bearish.
+  - Strike rounding: prefer $1 increments near ATM; if missing strike, fallback to nearest available.
+- Backtest exit simulation (later steps)
+  - Simulate market fills using second OHLC range with conservative assumptions:
+    - buy fills biased toward second high; sell fills biased toward second low.
+  - Sparse seconds are OK; carry-forward last known trade state.
+- Timezone
+  - Normalize timestamps to US/Eastern for trading-day calculations and file partitioning.

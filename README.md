@@ -5,6 +5,13 @@ This README is a detailed build plan intended for coding agents (Codex/Claude). 
 
 ---
 
+## Architecture + Decisions
+
+- Architecture overview: [`docs/ARCHITECTURE_OVERVIEW.md`](docs/ARCHITECTURE_OVERVIEW.md)
+- Project decisions: [`docs/PROJECT_DECISIONS.md`](docs/PROJECT_DECISIONS.md)
+
+---
+
 ## 0) Core Goals
 
 ### Primary goals
