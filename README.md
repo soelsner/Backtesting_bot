@@ -67,6 +67,17 @@ python -m src.cli.main fetch-spy --start 2025-01-02 --end 2025-01-10
 
 Re-running the command will skip cached dates.
 
+## Experiment Lab UI
+
+Run the Streamlit UI to configure experiments and execute backtests:
+
+```bash
+streamlit run ui/app.py
+```
+
+Experiment outputs are written under `data_local/experiments/`. See
+[`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for details.
+
 ## Project Structure
 
 ```
