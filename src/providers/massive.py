@@ -1,57 +1,69 @@
-"""Massive (Polygon) market data provider."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Dict, Any
+from typing import Iterable
 
-import pandas as pd
 import requests
 
-from src.config import MassiveConfig
-from src.providers.base import MarketDataProvider
+
+@dataclass(frozen=True)
+class MassiveConfig:
+    base_url: str = "https://api.polygon.io"
+    api_key: str | None = None
 
 
-@dataclass
-class MassiveMarketDataProvider(MarketDataProvider):
-    config: MassiveConfig
+class MassiveProvider:
+    def __init__(self, config: MassiveConfig) -> None:
+        self._config = config
 
-    def ping(self) -> bool:
-        url = f"{self.config.base_url}/v1/marketstatus/now"
-        response = requests.get(url, params={"apiKey": self.config.api_key}, timeout=10)
-        response.raise_for_status()
-        return True
+    def list_option_contracts(
+        self,
+        underlying: str,
+        expiration_date: date,
+        right: str,
+    ) -> list[dict]:
+        params = {
+            "underlying_ticker": underlying,
+            "expiration_date": expiration_date.isoformat(),
+            "contract_type": "call" if right.upper() == "C" else "put",
+            "limit": 1000,
+            "apiKey": self._config.api_key,
+        }
+        url = f"{self._config.base_url}/v3/reference/options/contracts"
+        results: list[dict] = []
+        while True:
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            payload = response.json()
+            results.extend(payload.get("results", []))
+            next_url = payload.get("next_url")
+            if not next_url:
+                break
+            url = next_url
+            params = {"apiKey": self._config.api_key}
+        return results
 
-    def fetch_spy_1m(self, session_date: date) -> pd.DataFrame:
+    def fetch_option_aggregates_1s(
+        self,
+        contract_ticker: str,
+        trade_date: date,
+    ) -> list[dict]:
         url = (
-            f"{self.config.base_url}/v2/aggs/ticker/SPY/range/1/minute/"
-            f"{session_date}/{session_date}"
+            f"{self._config.base_url}/v2/aggs/ticker/{contract_ticker}"
+            f"/range/1/second/{trade_date.isoformat()}/{trade_date.isoformat()}"
         )
         params = {
             "adjusted": "true",
             "sort": "asc",
             "limit": 50000,
-            "apiKey": self.config.api_key,
+            "apiKey": self._config.api_key,
         }
         response = requests.get(url, params=params, timeout=30)
         response.raise_for_status()
-        payload: Dict[str, Any] = response.json()
-        results = payload.get("results", [])
-        if not results:
-            return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+        payload = response.json()
+        return payload.get("results", [])
 
-        frame = pd.DataFrame(results)
-        frame = frame.rename(
-            columns={
-                "t": "timestamp",
-                "o": "open",
-                "h": "high",
-                "l": "low",
-                "c": "close",
-                "v": "volume",
-            }
-        )
-        frame["timestamp"] = pd.to_datetime(frame["timestamp"], unit="ms", utc=True)
-        frame = frame[["timestamp", "open", "high", "low", "close", "volume"]]
-        return frame
+
+def iter_contract_strikes(contracts: Iterable[dict]) -> list[float]:
+    return [float(contract["strike_price"]) for contract in contracts]

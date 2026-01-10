@@ -1,92 +1,89 @@
-# Backtesting Bot (SPY Options)
+# Backtesting_bot
+# SPY Options Backtesting Framework (ORB + EMA/RSI) — Two-Pass, Options-on-Demand
 
-Foundation scaffold for a two-pass SPY options backtesting framework. This step focuses on configuration, provider stubs, and local caching for SPY 1-minute bars.
+This README is a detailed build plan intended for coding agents (Codex/Claude). It describes architecture, modules, data flow, storage, configs, and acceptance criteria for a backtesting system focused on SPY options (1DTE/2DTE) with option price management at 1-second resolution.
 
-## Requirements
+---
 
-- Python 3.10+
-- Dependencies: `requests`, `pyyaml`, `pandas`, `pyarrow`
+## Architecture + Decisions
 
-Install:
+- Architecture overview: [`docs/ARCHITECTURE_OVERVIEW.md`](docs/ARCHITECTURE_OVERVIEW.md)
+- Project decisions: [`docs/PROJECT_DECISIONS.md`](docs/PROJECT_DECISIONS.md)
 
-```bash
-pip install -r requirements.txt
-```
+---
 
-## Configuration
+## 0) Core Goals
 
-You can provide configuration via environment variables and/or an optional `config.yaml`.
-Environment variables always take precedence.
+### Primary goals
+1. Backtest multiple SPY signal strategies:
+   - ORB (Opening Range Breakout)
+   - EMA crossovers
+   - RSI and other technicals
+2. Use SPY historical bars for signals/indicators.
+3. Simulate options trades using historical option **1-second aggregates** for:
+   - stop loss
+   - take profit
+   - trailing stop
+   - partial exits (optional)
+   - time stop (optional)
+4. Avoid downloading massive option datasets by using a **two-pass approach**:
+   - Pass 1: discover entries using SPY only
+   - Pass 2: fetch only the needed option contract series (1-second) for those entries
+5. Support scenario testing:
+   - configurable TP/SL parameters
+   - slippage model variants
+   - account size / allocation rules
+   - max trades per day, cooldown, etc.
+6. Deterministic reruns with caching of downloaded data.
 
-**Required environment variables**
+### Non-goals (for v1)
+- Perfect replication of Robinhood routing/fills (requires full quotes + venue microstructure).
+- Full OPRA tick replay or historical order book.
+- Modeling limit orders with queue priority.
+- Portfolio-level multi-asset strategies (v1 is SPY only).
 
-- `MASSIVE_API_KEY`
-- `ALPACA_API_KEY`
-- `ALPACA_SECRET_KEY`
+---
 
-Optional `config.yaml` example:
+## 1) High-Level Design: Two-Pass Backtest
 
-```yaml
-massive:
-  api_key: "your_key_here"
-  base_url: "https://api.polygon.io"
+### Pass 1 — Signal Discovery (SPY only)
+Inputs:
+- SPY 1-minute bars (preferred) or 5-minute bars
+- indicator features (ORB range, EMA, RSI, VWAP, etc.)
+Outputs:
+- EntrySignal records (time, direction, context)
 
-alpaca:
-  api_key: "your_key_here"
-  secret_key: "your_secret_here"
-  base_url: "https://paper-api.alpaca.markets"
+**No options data required** in Pass 1.
 
-local:
-  data_dir: "data_local"
-```
+### Pass 2 — Trade Simulation (options on demand)
+For each EntrySignal:
+1. Select an option contract (1DTE/2DTE, $1–$3 OTM by entry-time SPY price)
+2. Fetch historical 1-second option aggregates for that contract (cached locally)
+3. Simulate trade second-by-second (sparse seconds OK; carry-forward last state)
+4. Record trade outcome + account impact
 
-## Commands
+This yields realistic “would stop/TP have been hit?” behavior without pulling billions of rows.
 
-### Health check
+---
 
-Validates required env vars and pings Massive (Polygon) + Alpaca paper endpoints.
+## 2) Data Requirements
 
-```bash
-python -m src.cli.main health-check
-```
+### SPY underlying data (signals + indicators)
+- SPY 1-minute OHLCV for 2 years (regular trading session recommended initially)
 
-To validate config without external calls:
+### Options data (position management)
+- For each traded contract:
+  - 1-second aggregates OHLCV for the trade date (or entry→exit window)
+- Sparse seconds are expected; simulation must handle carry-forward.
 
-```bash
-python -m src.cli.main health-check --skip-ping
-```
+### Vendor/API assumptions
+- A market data provider that supports:
+  - SPY equity aggregates (1m)
+  - Options contract reference lookup (by expiration, strike, call/put)
+  - Options 1-second aggregates for a specific option ticker/contract
 
-### Fetch SPY 1-minute bars
+**IMPORTANT:** Do not hardcode to one provider in the core engine. Implement provider adapters.
 
-Downloads SPY 1-minute bars from Massive and caches them under:
-`data_local/spy/1m/date=YYYY-MM-DD/data.parquet`
+---
 
-```bash
-python -m src.cli.main fetch-spy --start 2025-01-02 --end 2025-01-10
-```
-
-Re-running the command will skip cached dates.
-
-## Experiment Lab UI
-
-Run the Streamlit UI to configure experiments and execute backtests:
-
-```bash
-streamlit run ui/app.py
-```
-
-Experiment outputs are written under `data_local/experiments/`. See
-[`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for details.
-
-## Project Structure
-
-```
-src/
-  cli/main.py            # CLI entrypoint
-  config.py              # YAML + env configuration loading
-  providers/
-    base.py              # Provider abstractions
-    massive.py           # Massive (Polygon) provider stub + fetch
-    alpaca.py            # Alpaca broker stub + ping
-  cache/spy_cache.py     # Parquet caching for SPY 1m bars
-```
+## 3) Repository Structure (Proposed)
