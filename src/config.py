@@ -37,6 +37,7 @@ class AppConfig:
 
 
 DEFAULT_CONFIG_PATH = Path("config.yaml")
+DEFAULT_ENV_PATH = Path(".env")
 
 
 class ConfigError(RuntimeError):
@@ -56,7 +57,24 @@ def _get_env(name: str) -> Optional[str]:
     return value.strip() if value else None
 
 
+def _load_dotenv(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
 def load_config(path: Optional[Path] = None) -> AppConfig:
+    _load_dotenv(DEFAULT_ENV_PATH)
     config_path = path or DEFAULT_CONFIG_PATH
     raw = _load_yaml(config_path)
 

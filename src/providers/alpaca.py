@@ -78,6 +78,10 @@ class AlpacaMarketDataProvider(MarketDataProvider):
                 "v": "volume",
             }
         )
-        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True).dt.tz_convert("America/New_York")
+        market_open = time(9, 30)
+        market_close = time(16, 0)
+        times = frame["timestamp"].dt.time
+        frame = frame[(times >= market_open) & (times <= market_close)]
         frame = frame[["timestamp", "open", "high", "low", "close", "volume"]]
         return frame
