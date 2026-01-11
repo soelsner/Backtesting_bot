@@ -6,7 +6,7 @@ import argparse
 import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, List
 
 from src.cache.spy_cache import Spy1mCache
 from src.config import ConfigError, load_config
@@ -22,6 +22,20 @@ def _date_range(start: date, end: date) -> Iterable[date]:
     while current <= end:
         yield current
         current += timedelta(days=1)
+
+
+def _trading_days(start: date, end: date) -> List[date]:
+    try:
+        import pandas_market_calendars as mcal
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "pandas_market_calendars is required to filter trading days. "
+            "Install it with: pip install pandas_market_calendars"
+        ) from exc
+
+    nyse = mcal.get_calendar("NYSE")
+    schedule = nyse.schedule(start_date=start, end_date=end)
+    return [ts.date() for ts in schedule.index]
 
 
 def health_check(args: argparse.Namespace) -> int:
@@ -73,7 +87,7 @@ def fetch_spy(args: argparse.Namespace) -> int:
 
     cached = 0
     fetched = 0
-    for session_date in _date_range(start, end):
+    for session_date in _trading_days(start, end):
         if cache.has_date(session_date):
             cached += 1
             logging.info("Cache hit for %s", session_date)

@@ -58,7 +58,7 @@ python -m src.cli.main health-check --skip-ping
 
 ### Fetch SPY 1-minute bars
 
-Downloads SPY 1-minute bars from Massive and caches them under:
+Downloads SPY 1-minute bars from Alpaca and caches them under:
 `data_local/spy/1m/date=YYYY-MM-DD/data.parquet`
 
 ```bash
@@ -66,6 +66,9 @@ python -m src.cli.main fetch-spy --start 2025-01-02 --end 2025-01-10
 ```
 
 Re-running the command will skip cached dates.
+
+Cached bars are stored in `America/New_York` and filtered to regular market hours
+(09:30–16:00 ET).
 
 ## Experiment Lab UI
 

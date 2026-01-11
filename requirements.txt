@@ -3,3 +3,4 @@ pyyaml
 pandas
 pyarrow
 streamlit
+pandas_market_calendars

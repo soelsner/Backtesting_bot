@@ -30,8 +30,43 @@ def _normalize_timezone(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
     return index.tz_convert("UTC")
 
 
+def _date_range(start: dt.date, end: dt.date) -> list[dt.date]:
+    days: list[dt.date] = []
+    current = start
+    while current <= end:
+        days.append(current)
+        current += dt.timedelta(days=1)
+    return days
+
+
+def _load_spy_cache(path: Path, start: dt.date, end: dt.date) -> pd.DataFrame:
+    base = path if path.is_dir() else path.parent
+    if base.name == "1m" and base.parent.name == "spy":
+        cache_root = base
+    elif base.name == "spy":
+        cache_root = base / "1m"
+    else:
+        cache_root = base / "spy" / "1m"
+
+    frames: list[pd.DataFrame] = []
+    for session_date in _date_range(start, end):
+        date_path = cache_root / f"date={session_date.isoformat()}" / "data.parquet"
+        if date_path.exists():
+            frames.append(pd.read_parquet(date_path))
+
+    if not frames:
+        raise FileNotFoundError(
+            f"No SPY cache files found under {cache_root} for {start} to {end}."
+        )
+    return pd.concat(frames, ignore_index=True)
+
+
 def load_spy_1m_bars(path: str | Path, start: dt.date, end: dt.date) -> pd.DataFrame:
-    df = pd.read_parquet(path)
+    path = Path(path)
+    if path.exists() and path.is_file():
+        df = pd.read_parquet(path)
+    else:
+        df = _load_spy_cache(path, start, end)
     df = _ensure_datetime_index(df)
     df.index = _normalize_timezone(df.index)
     df = df.sort_index()
